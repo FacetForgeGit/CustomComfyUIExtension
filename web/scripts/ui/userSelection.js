@@ -38,10 +38,12 @@ export class UserSelectionScreen {
 
 			form.addEventListener("submit", async (e) => {
 				e.preventDefault();
+				console.log("Form submitted. Input active:", inputActive); // Added for debugging
 				if (inputActive == null) {
 					error.textContent = "Please enter a username or select an existing user.";
 				} else if (inputActive) {
 					const username = input.value.trim();
+					console.log("Creating new user with username:", username); // Added for debugging
 					if (!username) {
 						error.textContent = "Please enter a username.";
 						return;
@@ -76,6 +78,7 @@ export class UserSelectionScreen {
 					error.textContent = "Please select an existing user.";
 					return;
 				} else {
+					console.log("Selected existing user with ID:", select.value); // Added for debugging
 					resolve({ username: users[select.value], userId: select.value, created: false });
 				}
 			});

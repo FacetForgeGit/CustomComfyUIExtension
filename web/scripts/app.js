@@ -355,7 +355,7 @@ export class ComfyApp {
 								window.open(url, "_blank");
 							},
 						},
-						...getCopyImageOption(img), 
+						...getCopyImageOption(img),
 						{
 							content: "Save Image",
 							callback: () => {
@@ -599,7 +599,7 @@ export class ComfyApp {
 
 				if (this.imgs?.length) {
 					const widgetIdx = this.widgets?.findIndex((w) => w.name === ANIM_PREVIEW_WIDGET);
-				
+
 					if(this.animatedImages) {
 						// Instead of using the canvas we'll use a IMG
 						if(widgetIdx > -1) {
@@ -1335,9 +1335,9 @@ export class ComfyApp {
 			for (const node of app.graph._nodes) {
 				node.onGraphConfigured?.();
 			}
-			
+
 			const r = onConfigure?.apply(this, arguments);
-			
+
 			// Fire after onConfigure, used by primitves to generate widget using input nodes config
 			for (const node of app.graph._nodes) {
 				node.onAfterGraphConfigured?.();
@@ -1353,7 +1353,7 @@ export class ComfyApp {
 	async #loadExtensions() {
 	    const extensions = await api.getExtensions();
 	    this.logging.addEntry("Comfy.App", "debug", { Extensions: extensions });
-	
+
 	    const extensionPromises = extensions.map(async ext => {
 	        try {
 	            await import(api.apiURL(ext));
@@ -1361,7 +1361,7 @@ export class ComfyApp {
 	            console.error("Error loading extension", ext, error);
 	        }
 	    });
-	
+
 	    await Promise.all(extensionPromises);
 	}
 
@@ -1399,7 +1399,7 @@ export class ComfyApp {
 		if (!user || !users[user]) {
 			// This will rarely be hit so move the loading to on demand
 			const { UserSelectionScreen } = await import("./ui/userSelection.js");
-		
+
 			this.ui.menuContainer.style.display = "none";
 			const { userId, username, created } = await new UserSelectionScreen().show(users, user);
 			this.ui.menuContainer.style.display = "";
@@ -2251,3 +2251,51 @@ export class ComfyApp {
 }
 
 export const app = new ComfyApp();
+
+// Custom LiteGraph node to serve as a container for the CollapsibleWindow React component
+function CollapsibleWindowNode() {
+    this.addOutput("output", "window");
+    this.properties = { title: "Collapsible Window" };
+    this.collapsibleWindowRef = React.createRef();
+}
+
+CollapsibleWindowNode.title = "Collapsible Window";
+CollapsibleWindowNode.desc = "A node that contains a collapsible window for custom controls";
+
+CollapsibleWindowNode.prototype.onDrawBackground = function(ctx) {
+    if (this.flags.collapsed) return;
+
+    // Create a DOM element for the React component if it doesn't exist
+    if (!this.collapsibleWindowRef.current) {
+        const div = document.createElement("div");
+        div.style.position = "absolute";
+        div.style.top = `${this.pos[1]}px`;
+        div.style.left = `${this.pos[0]}px`;
+        div.style.width = `${this.size[0]}px`;
+        div.style.height = `${this.size[1]}px`;
+        this.collapsibleWindowRef.current = div;
+        this.graph.canvas.parentNode.appendChild(div);
+
+        // Mount the React component
+        ReactDOM.render(<CollapsibleWindow title={this.properties.title} />, div);
+    }
+
+    // Update the position and size of the DOM element
+    const div = this.collapsibleWindowRef.current;
+    div.style.top = `${this.pos[1]}px`;
+    div.style.left = `${this.pos[0]}px`;
+    div.style.width = `${this.size[0]}px`;
+    div.style.height = `${this.size[1]}px`;
+};
+
+CollapsibleWindowNode.prototype.onRemoved = function() {
+    // Unmount the React component when the node is removed
+    const div = this.collapsibleWindowRef.current;
+    if (div) {
+        ReactDOM.unmountComponentAtNode(div);
+        div.parentNode.removeChild(div);
+        this.collapsibleWindowRef.current = null;
+    }
+};
+
+LiteGraph.registerNodeType("ui/collapsible_window", CollapsibleWindowNode);

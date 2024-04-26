@@ -5,7 +5,8 @@ import { api } from "./api.js";
 import { defaultGraph } from "./defaultGraph.js";
 import { getPngMetadata, getWebpMetadata, importA1111, getLatentMetadata } from "./pnginfo.js";
 import { addDomClippingSetting } from "./domWidget.js";
-import { createImageHost, calculateImageGrid } from "./ui/imagePreview.js"
+import { createImageHost, calculateImageGrid } from "./ui/imagePreview.js";
+import { CollapsibleWindowNode } from "./extensions/CustomComfyUIExtension/CollapsibleWindow.js";
 
 export const ANIM_PREVIEW_WIDGET = "$$comfy_animation_preview"
 
@@ -1448,95 +1449,101 @@ export class ComfyApp {
 	/**
 	 * Set up the app on the page
 	 */
-	async setup() {
-		await this.#setUser();
-		await this.ui.settings.load();
-		await this.#loadExtensions();
+ async setup() {
+ 	await this.#setUser();
+ 	await this.ui.settings.load();
+ 	await this.#loadExtensions();
 
-		// Create and mount the LiteGraph in the DOM
-		const mainCanvas = document.createElement("canvas")
-		mainCanvas.style.touchAction = "none"
-		const canvasEl = (this.canvasEl = Object.assign(mainCanvas, { id: "graph-canvas" }));
-		canvasEl.tabIndex = "1";
-		document.body.prepend(canvasEl);
+ 	// Create and mount the LiteGraph in the DOM
+ 	const mainCanvas = document.createElement("canvas")
+ 	mainCanvas.style.touchAction = "none"
+ 	const canvasEl = (this.canvasEl = Object.assign(mainCanvas, { id: "graph-canvas" }));
+ 	canvasEl.tabIndex = "1";
+ 	document.body.prepend(canvasEl);
 
-		addDomClippingSetting();
-		this.#addProcessMouseHandler();
-		this.#addProcessKeyHandler();
-		this.#addConfigureHandler();
-		this.#addApiUpdateHandlers();
+ 	addDomClippingSetting();
+ 	this.#addProcessMouseHandler();
+ 	this.#addProcessKeyHandler();
+ 	this.#addConfigureHandler();
+ 	this.#addApiUpdateHandlers();
 
-		this.graph = new LGraph();
+ 	this.graph = new LGraph();
 
-		this.#addAfterConfigureHandler();
+ 	this.graph.start();
 
-		const canvas = (this.canvas = new LGraphCanvas(canvasEl, this.graph));
-		this.ctx = canvasEl.getContext("2d");
+ 	// Instantiate and add the CollapsibleWindowNode to the graph
+ 	const collapsibleWindowNode = new CollapsibleWindowNode();
+ 	this.graph.addNode(collapsibleWindowNode);
 
-		LiteGraph.release_link_on_empty_shows_menu = true;
-		LiteGraph.alt_drag_do_clone_nodes = true;
+ 	this.#addAfterConfigureHandler();
 
-		this.graph.start();
+ 	const canvas = (this.canvas = new LGraphCanvas(canvasEl, this.graph));
+ 	this.ctx = canvasEl.getContext("2d");
 
-		function resizeCanvas() {
-			// Limit minimal scale to 1, see https://github.com/comfyanonymous/ComfyUI/pull/845
-			const scale = Math.max(window.devicePixelRatio, 1);
-			const { width, height } = canvasEl.getBoundingClientRect();
-			canvasEl.width = Math.round(width * scale);
-			canvasEl.height = Math.round(height * scale);
-			canvasEl.getContext("2d").scale(scale, scale);
-			canvas.draw(true, true);
-		}
+ 	LiteGraph.release_link_on_empty_shows_menu = true;
+ 	LiteGraph.alt_drag_do_clone_nodes = true;
 
-		// Ensure the canvas fills the window
-		resizeCanvas();
-		window.addEventListener("resize", resizeCanvas);
+ 	this.graph.start();
 
-		await this.#invokeExtensionsAsync("init");
-		await this.registerNodes();
-		initWidgets(this);
+ 	function resizeCanvas() {
+ 		// Limit minimal scale to 1, see https://github.com/comfyanonymous/ComfyUI/pull/845
+ 		const scale = Math.max(window.devicePixelRatio, 1);
+ 		const { width, height } = canvasEl.getBoundingClientRect();
+ 		canvasEl.width = Math.round(width * scale);
+ 		canvasEl.height = Math.round(height * scale);
+ 		canvasEl.getContext("2d").scale(scale, scale);
+ 		canvas.draw(true, true);
+ 	}
 
-		// Load previous workflow
-		let restored = false;
-		try {
-			const loadWorkflow = async (json) => {
-				if (json) {
-					const workflow = JSON.parse(json);
-					await this.loadGraphData(workflow);
-					return true;
-				}
-			};
-			const clientId = api.initialClientId ?? api.clientId;
-			restored =
-				(clientId && (await loadWorkflow(sessionStorage.getItem(`workflow:${clientId}`)))) ||
-				(await loadWorkflow(localStorage.getItem("workflow")));
-		} catch (err) {
-			console.error("Error loading previous workflow", err);
-		}
+ 	// Ensure the canvas fills the window
+ 	resizeCanvas();
+ 	window.addEventListener("resize", resizeCanvas);
 
-		// We failed to restore a workflow so load the default
-		if (!restored) {
-			await this.loadGraphData();
-		}
+ 	await this.#invokeExtensionsAsync("init");
+ 	await this.registerNodes();
+ 	initWidgets(this);
 
-		// Save current workflow automatically
-		setInterval(() => {
-			const workflow = JSON.stringify(this.graph.serialize());
-			localStorage.setItem("workflow", workflow);
-			if (api.clientId) {
-				sessionStorage.setItem(`workflow:${api.clientId}`, workflow);
-			}
-		}, 1000);
+ 	// Load previous workflow
+ 	let restored = false;
+ 	try {
+ 		const loadWorkflow = async (json) => {
+ 			if (json) {
+ 				const workflow = JSON.parse(json);
+ 				await this.loadGraphData(workflow);
+ 				return true;
+ 			}
+ 		};
+ 		const clientId = api.initialClientId ?? api.clientId;
+ 		restored =
+ 			(clientId && (await loadWorkflow(sessionStorage.getItem(`workflow:${clientId}`)))) ||
+ 			(await loadWorkflow(localStorage.getItem("workflow")));
+ 	} catch (err) {
+ 		console.error("Error loading previous workflow", err);
+ 	}
 
-		this.#addDrawNodeHandler();
-		this.#addDrawGroupsHandler();
-		this.#addDropHandler();
-		this.#addCopyHandler();
-		this.#addPasteHandler();
-		this.#addKeyboardHandler();
+ 	// We failed to restore a workflow so load the default
+ 	if (!restored) {
+ 		await this.loadGraphData();
+ 	}
 
-		await this.#invokeExtensionsAsync("setup");
-	}
+ 	// Save current workflow automatically
+ 	setInterval(() => {
+ 		const workflow = JSON.stringify(this.graph.serialize());
+ 		localStorage.setItem("workflow", workflow);
+ 		if (api.clientId) {
+ 			sessionStorage.setItem(`workflow:${api.clientId}`, workflow);
+ 		}
+ 	}, 1000);
+
+ 	this.#addDrawNodeHandler();
+ 	this.#addDrawGroupsHandler();
+ 	this.#addDropHandler();
+ 	this.#addCopyHandler();
+ 	this.#addPasteHandler();
+ 	this.#addKeyboardHandler();
+
+ 	await this.#invokeExtensionsAsync("setup");
+ }
 
 	/**
 	 * Registers nodes with the graph
